@@ -2,6 +2,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Product } from '../types';
 import { isKgProduct } from '../utils/weightParser';
 
+// TODO: [DEDUP] This function is duplicated in `src/db/supabaseService.ts` (server-side).
+// Both implementations must be kept in sync until a shared utility is extracted.
+// Do NOT import supabaseService here - it runs server-side only.
 export function normalizeProductFromDb(p: any): Product {
   if (!p) return p;
   const isKg = isKgProduct(p);

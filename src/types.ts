@@ -122,6 +122,10 @@ export interface OrderItem {
   img?: string;
 }
 
+// TODO: [INCONSISTENCY] OrderStatus mixes Title Case UI labels ('New Orders', 'Confirmed') with
+// legacy lowercase values ('processing', 'packing', 'dispatched'). The lowercase values are kept
+// for backwards-compatibility with old DB records. Migrate DB data and remove lowercase values
+// once all orders using them have been fulfilled or archived.
 export type OrderStatus =
   | 'New Orders'
   | 'Confirmed'

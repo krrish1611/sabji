@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
-import { isKgProduct } from '../utils/weightParser';
+import { isKgProduct } from '../../src/utils/weightParser';
 import { runDirectPostgresMigration } from './autoMigratePostgres';
 
 export const tableColumnsMap: Map<string, Set<string>> = new Map();

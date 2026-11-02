@@ -771,6 +771,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [showEditProductModal, setShowEditProductModal] = useState(false);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [editProductError, setEditProductError] = useState<string | null>(null);
+  const [isUploadingProdImg, setIsUploadingProdImg] = useState(false);
+  const [isUploadingEditImg, setIsUploadingEditImg] = useState(false);
 
   // Dedicated Quick Weight Slabs Manager Modal State
   const [slabsModalProduct, setSlabsModalProduct] = useState<Product | null>(null);
@@ -1186,16 +1188,108 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadProductImageFile = async (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+      if (!allowedTypes.includes(file.type.toLowerCase())) {
+        setAdminError('Invalid file type. Only PNG, JPG, and WebP images are supported.');
+        resolve(null);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = async () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 800;
+
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+          try {
+            const res = await fetch('/api/upload-product-image', {
+              method: 'POST',
+              headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify({ image: compressedDataUrl })
+            });
+
+            const data = await res.json();
+            if (res.ok && data?.url) {
+              resolve(data.url);
+              return;
+            }
+          } catch (uploadErr) {
+            console.warn('Backend image upload fallback to local dataUrl:', uploadErr);
+          }
+
+          resolve(compressedDataUrl);
+        };
+        img.onerror = () => resolve(null);
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        if (uploadEvent.target?.result) {
-          setNewProdImg(uploadEvent.target.result as string);
+      setIsUploadingProdImg(true);
+      try {
+        const uploadedUrl = await uploadProductImageFile(file);
+        if (uploadedUrl) {
+          setNewProdImg(uploadedUrl);
+          setAdminSuccess('Photo uploaded successfully! 📸');
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (err: any) {
+        setAdminError('Failed to process image: ' + (err?.message || 'Upload error'));
+      } finally {
+        setIsUploadingProdImg(false);
+      }
+    }
+  };
+
+  const handleEditImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && editingProduct) {
+      setIsUploadingEditImg(true);
+      try {
+        const uploadedUrl = await uploadProductImageFile(file);
+        if (uploadedUrl) {
+          setEditingProduct(prev => prev ? {
+            ...prev,
+            img: uploadedUrl,
+            image: uploadedUrl,
+            image_url: uploadedUrl,
+            images: [{ id: `img_${prev.id}_${Date.now()}`, url: uploadedUrl, tag: 'Cover', isConfirmed: true, isMatch: true }]
+          } : null);
+          setAdminSuccess('Vegetable photo updated successfully! 📸');
+        }
+      } catch (err: any) {
+        setAdminError('Failed to process image: ' + (err?.message || 'Upload error'));
+      } finally {
+        setIsUploadingEditImg(false);
+      }
     }
   };
 
@@ -3988,7 +4082,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             />
                             <div className="flex items-center gap-2">
                               <label className="cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-xs font-bold text-[var(--fg)] hover:bg-[var(--muted)] transition-all flex items-center gap-2">
-                                <span>📁 Upload Local File</span>
+                                <span>{isUploadingProdImg ? '⏳ Uploading...' : '📁 Upload Local File'}</span>
                                 <input
                                   type="file"
                                   accept="image/*"
@@ -4455,31 +4549,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </div>
 
                           <div className="flex flex-col gap-1">
-                            <label className="text-[10px] font-bold text-[var(--muted-fg)] uppercase">Product Image URL *</label>
-                            <div className="flex gap-3 items-center">
+                            <label className="text-[10px] font-bold text-[var(--muted-fg)] uppercase">Product Image (Enter URL or Upload from Device) *</label>
+                            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
                               <input
                                 type="text"
                                 required
                                 value={editingProduct.img}
                                 onChange={(e) => setEditingProduct({ ...editingProduct, img: e.target.value })}
-                                placeholder="https://..."
+                                placeholder="https://... or upload photo below"
                                 className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3.5 py-2 text-xs text-[var(--fg)] outline-none focus:border-[var(--primary)]"
                               />
-                              {editingProduct.img && (
-                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-[var(--border)] bg-gray-50 dark:bg-neutral-800 shrink-0">
-                                  <img
-                                    src={editingProduct.img}
-                                    alt="Preview"
-                                    referrerPolicy="no-referrer"
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=100';
-                                    }}
+                              <div className="flex items-center gap-2">
+                                <label className="cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-xs font-bold text-[var(--fg)] hover:bg-[var(--muted)] transition-all flex items-center gap-2 shrink-0">
+                                  <span>{isUploadingEditImg ? '⏳ Uploading...' : '📁 Upload Photo'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    disabled={isUploadingEditImg}
+                                    onChange={handleEditImageFileChange}
+                                    className="hidden"
                                   />
-                                </div>
-                              )}
+                                </label>
+                                {editingProduct.img && (
+                                  <div className="w-10 h-10 rounded-lg overflow-hidden border border-[var(--border)] bg-gray-50 dark:bg-neutral-800 shrink-0">
+                                    <img
+                                      src={editingProduct.img}
+                                      alt="Preview"
+                                      referrerPolicy="no-referrer"
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=100';
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <p className="text-[10px] text-[var(--muted-fg)]">Enter a public image URL. The updated URL is saved directly into Supabase.</p>
+                            <p className="text-[10px] text-[var(--muted-fg)]">Enter a public image URL or upload directly from your device. The photo will be saved to storage and database.</p>
                           </div>
 
                           {/* Vegetable Pricing Engine: Active ONLY when Selling Unit is 'kg' */}

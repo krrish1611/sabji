@@ -28,6 +28,7 @@ interface CartDrawerProps {
   appliedCoupon: string;
   couponDiscount: number;
   onApplyCoupon: (code: string, discount: number) => void;
+  businessSettings?: any;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -45,12 +46,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   appliedCoupon,
   couponDiscount,
   onApplyCoupon,
+  businessSettings: propBusinessSettings,
 }) => {
+  const activeSettings = propBusinessSettings;
   const items = Object.values(cart) as CartItem[];
   const subtotal = items.reduce((acc, i) => acc + i.sp * i.qty, 0);
-  const delivery = subtotal >= 299 ? 0 : 30;
+  const minFree = typeof activeSettings?.minFreeDelivery === 'number' ? activeSettings.minFreeDelivery : 299;
+  const stdShipping = typeof activeSettings?.standardShipping === 'number' ? activeSettings.standardShipping : 30;
+  const delivery = subtotal >= minFree ? 0 : stdShipping;
   
-  // Is FREE90 coupon applied?
+  // Is FREE90 or free delivery coupon applied?
   const isFreeDeliveryApplied = appliedCoupon === 'FREE90';
   const finalDelivery = isFreeDeliveryApplied ? 0 : delivery;
   const total = Math.max(0, subtotal + finalDelivery - couponDiscount);
@@ -99,7 +104,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         couponCode: appliedCoupon || undefined
       })
     })
-      .then(res => res.json())
+      .then(res => safeJson(res, null))
       .then(data => {
         if (data && data.valid) {
           setVerifiedCart(data);

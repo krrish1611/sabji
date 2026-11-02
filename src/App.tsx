@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabaseClient, AppRealtimeHub } from './lib/supabaseClient';
-import { Product, Order, User, Offer, Review, Address, CartItem, Category } from './types';
+import { Product, Order, User, Offer, Review, Address, CartItem, Category, BusinessSettings } from './types';
 import { CATEGORIES, INITIAL_PRODUCTS, INITIAL_OFFERS, INITIAL_REVIEWS, DELIVERY_ZONES } from './data';
 import { ProductCard } from './components/ProductCard';
 import { HeroSection } from './components/HeroSection';
@@ -167,14 +167,16 @@ export default function App() {
     }
   });
 
-  const [businessSettings, setBusinessSettings] = useState<{
-    enableIgBanner: boolean;
-    igProfileUrl: string;
-    igBannerText: string;
-  }>({
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings>({
+    minFreeDelivery: 299,
+    standardShipping: 30,
+    isOpen: true,
     enableIgBanner: true,
     igProfileUrl: 'https://www.instagram.com/sabjies?igsh=MWp6cDQ2NHZtcnE0Zw',
     igBannerText: '🎁 Follow us on Instagram for exclusive discount codes.',
+    businessName: 'Sabjies Fresh Grocery',
+    supportPhone: '99203 24172',
+    supportEmail: 'greensabjies@gmail.com'
   });
 
   // Navigation / Search Filtering
@@ -654,11 +656,16 @@ export default function App() {
       fetchWithTimeout('/api/business-settings', null, 2500)
         .then(data => {
           if (data) {
-            setBusinessSettings({
+            setBusinessSettings(prev => ({
+              ...prev,
+              ...data,
+              minFreeDelivery: data.minFreeDelivery !== undefined ? Number(data.minFreeDelivery) : (prev?.minFreeDelivery ?? 299),
+              standardShipping: data.standardShipping !== undefined ? Number(data.standardShipping) : (prev?.standardShipping ?? 30),
+              isOpen: data.isOpen !== undefined ? Boolean(data.isOpen) : (prev?.isOpen ?? true),
               enableIgBanner: data.enableIgBanner !== undefined ? data.enableIgBanner : true,
-              igProfileUrl: data.igProfileUrl || 'https://www.instagram.com/sabjies?igsh=MWp6cDQ2NHZtcnE0Zw',
-              igBannerText: data.igBannerText || '🎁 Follow us on Instagram for exclusive discount codes.',
-            });
+              igProfileUrl: data.igProfileUrl || prev?.igProfileUrl,
+              igBannerText: data.igBannerText || prev?.igBannerText,
+            }));
           }
         })
         .catch(() => {});
@@ -1016,14 +1023,15 @@ export default function App() {
           body: JSON.stringify(orderPayload)
         });
 
-        const responseData = await response.json();
+        const responseData = await safeJson(response, null);
+        const resolvedOrder = responseData?.order || responseData;
 
-        if (!response.ok || !responseData.id) {
-          showToast(responseData.error || 'Order placement failed server price or stock verification.', 'error');
+        if (!response.ok || !resolvedOrder?.id) {
+          showToast(responseData?.error || 'Order placement failed server price or stock verification.', 'error');
           return;
         }
 
-        verifiedOrder = responseData;
+        verifiedOrder = resolvedOrder;
       }
 
       // Update inventory stock levels
@@ -2001,6 +2009,14 @@ export default function App() {
         </div>
       )}
 
+      {/* ── STORE CLOSED NOTICE BANNER ── */}
+      {businessSettings.isOpen === false && (
+        <div className="bg-amber-600 text-white py-2 px-4 shadow-inner relative z-30 font-bold text-xs sm:text-sm text-center flex items-center justify-center gap-2">
+          <span>⏳</span>
+          <span>We are currently closed for today's harvest delivery. Orders placed now will be packed and delivered during our next operating hours.</span>
+        </div>
+      )}
+
       {/* ── MOBILE SLIDING NAVIGATION DRAWER ── */}
       <AnimatePresence>
         {isMobileMenuOpen && (
@@ -2799,6 +2815,7 @@ export default function App() {
         onUpdateSavedForLater={setSavedForLater}
         appliedCoupon={appliedCoupon}
         couponDiscount={couponDiscount}
+        businessSettings={businessSettings}
         onApplyCoupon={(code, disc) => {
           setAppliedCoupon(code);
           setCouponDiscount(disc);
@@ -2816,6 +2833,7 @@ export default function App() {
             onUpdateAddresses={handleUpdateAddresses}
             appliedCoupon={appliedCoupon}
             couponDiscount={couponDiscount}
+            businessSettings={businessSettings}
             onApplyCoupon={(code, disc) => {
               setAppliedCoupon(code);
               setCouponDiscount(disc);

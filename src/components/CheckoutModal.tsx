@@ -31,6 +31,7 @@ interface CheckoutModalProps {
   // Delivery Instructions
   deliveryInstructions: string;
   onChangeDeliveryInstructions: (val: string) => void;
+  businessSettings?: BusinessSettings;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
@@ -44,6 +45,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onApplyCoupon,
   deliveryInstructions,
   onChangeDeliveryInstructions,
+  businessSettings: propBusinessSettings,
 }) => {
   const [selectedAddressIdx, setSelectedAddressIdx] = useState(0);
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -131,10 +133,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const addresses = user?.addresses || [];
   const cartItems = Object.values(cart) as CartItem[];
   const subtotal = cartItems.reduce((acc, i) => acc + i.sp * i.qty, 0);
-  const delivery = subtotal >= 299 ? 0 : 30;
+  const minFree = typeof propBusinessSettings?.minFreeDelivery === 'number' ? propBusinessSettings.minFreeDelivery : 299;
+  const stdShipping = typeof propBusinessSettings?.standardShipping === 'number' ? propBusinessSettings.standardShipping : 30;
+  const delivery = subtotal >= minFree ? 0 : stdShipping;
+
+  const [isFreeDelCoupon, setIsFreeDelCoupon] = useState(() => appliedCoupon === 'FREE90');
 
   // Coupon delivery fee deduction
-  const isFreeDeliveryApplied = appliedCoupon === 'FREE90';
+  const isFreeDeliveryApplied = appliedCoupon === 'FREE90' || isFreeDelCoupon;
   const finalDelivery = isFreeDeliveryApplied ? 0 : delivery;
   const total = Math.max(0, subtotal + finalDelivery - couponDiscount);
 
@@ -334,6 +340,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     .then(res => safeJson(res, { valid: false, message: 'Invalid response from coupon server' }))
     .then(data => {
       if (data && data.valid) {
+        if (data.type === 'free_delivery' || data.code === 'FREE90') {
+          setIsFreeDelCoupon(true);
+        } else {
+          setIsFreeDelCoupon(false);
+        }
         onApplyCoupon(data.code, data.discount);
         setCouponInput('');
       } else {
